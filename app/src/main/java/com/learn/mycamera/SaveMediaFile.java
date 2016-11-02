@@ -27,7 +27,7 @@ public class SaveMediaFile {
         return Uri.fromFile(getOutputMediaFile(type));
     }
     public static File getOutputMediaFile(int type){
-        File mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),"MyCameraApp");
+        File mediaStorageDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),"Camera");
         if(!mediaStorageDir.exists()){
             if(!mediaStorageDir.mkdir()){
                 Log.d(TAG, "getOutputMediaFile: failed to create new file");

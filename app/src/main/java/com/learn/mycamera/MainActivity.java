@@ -4,31 +4,28 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
+import android.media.Image;
 import android.media.MediaRecorder;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.support.v4.app.ActivityCompat;
 import android.util.Log;
-import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
 import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
-
-import com.learn.mycamera.SaveMediaFile;
 
 public class MainActivity extends Activity implements View.OnClickListener {
     public static String TAG = "MainActivity";
@@ -48,6 +45,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
     public static int selectPosition = 0;
     private List<RateItem> rateItemList;
     private double CAPTURE_RATE = 10;
+    private ImageView mTimeLapseIndicator;
 
     static String[] permissions = new String[]{Manifest.permission.CAMERA,Manifest.permission.RECORD_AUDIO,Manifest.permission.WRITE_EXTERNAL_STORAGE};
     private PermissionsChecker mPermissionsChecker;
@@ -55,13 +53,36 @@ public class MainActivity extends Activity implements View.OnClickListener {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        Log.d(TAG, "onCreate: true");
         mPermissionsChecker = new PermissionsChecker(this);
         if(mPermissionsChecker.lacksPermissions(permissions)){
             ActivityCompat.requestPermissions(this,permissions,1);
+        }else{
+            prepare();
         }
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        setContentView(R.layout.activity_main);
 
+            /*handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if(mCamera != null){
+                        mCamera.startPreview();
+                        mCamera.stopPreview();
+                        mCamera.startPreview();
+                    }else{
+                        Log.d(TAG, "run: camera is null");
+                    }
+
+                }
+            });
+        }*/
+
+
+    }
+
+    private void prepare() {
+
+        setContentView(R.layout.activity_main);
         handler = new Handler(getMainLooper());
         initRateData();
         initViews();
@@ -72,21 +93,42 @@ public class MainActivity extends Activity implements View.OnClickListener {
         } else {
             Log.d(TAG, "onCreate: 无摄像头");
         }
+        initCamera();
+        mCamera.startPreview();
+    }
+
+    private void initCamera() {
         mCamera = getCameraInstance();
+        Camera.Parameters parameters = mCamera.getParameters();
+        List<Camera.Size> mPreviewSizeList = parameters.getSupportedPreviewSizes();
+        List<Camera.Size> mPictureSizeList = parameters.getSupportedPictureSizes();
+        List<Camera.Size> mThumbSizeList = parameters.getSupportedJpegThumbnailSizes();
+        List<List<Camera.Size>> mList = new ArrayList<>();
+        mList.add(mPreviewSizeList);
+        mList.add(mPictureSizeList);
+        mList.add(mThumbSizeList);
+        for(List<Camera.Size> list:mList){
+            for(Camera.Size size: list){
+                Log.d(TAG, "initCamera: w = " + size.width + ",h = " + size.height);
+            }
+            Log.d(TAG, "\n");
+        }
+        parameters.setPreviewSize(1280,720);
+        mCamera.setParameters(parameters);
         mCamera.setDisplayOrientation(90);
-        mCameraSurfaceView = new CameraSurfaceView(this, mCamera);
+        mCameraSurfaceView = new CameraSurfaceView(MainActivity.this, mCamera);
         FrameLayout preview = (FrameLayout) findViewById(R.id.framelayput_preview);
         preview.addView(mCameraSurfaceView);
     }
 
     private void initRateData() {
         rateItemList = new ArrayList<>();
-        RateItem rateItem0 = new RateItem(R.drawable.ic_launcher,"1s");
-        RateItem rateItem1 = new RateItem(R.drawable.ic_launcher,"1.5s");
-        RateItem rateItem2 = new RateItem(R.drawable.ic_launcher,"2s");
-        RateItem rateItem3 = new RateItem(R.drawable.ic_launcher,"2.5s");
-        RateItem rateItem4 = new RateItem(R.drawable.ic_launcher,"3s");
-        RateItem rateItem5 = new RateItem(R.drawable.ic_launcher,"5s");
+        RateItem rateItem0 = new RateItem(R.drawable.timelapse_1s,"1s");
+        RateItem rateItem1 = new RateItem(R.drawable.timelapse_1_5s,"1.5s");
+        RateItem rateItem2 = new RateItem(R.drawable.timelapse_2s,"2s");
+        RateItem rateItem3 = new RateItem(R.drawable.timelapse_2_5s,"2.5s");
+        RateItem rateItem4 = new RateItem(R.drawable.timelapse_3s,"3s");
+        RateItem rateItem5 = new RateItem(R.drawable.timelapse_5s,"5s");
         rateItemList.add(rateItem0);
         rateItemList.add(rateItem1);
         rateItemList.add(rateItem2);
@@ -98,8 +140,26 @@ public class MainActivity extends Activity implements View.OnClickListener {
     @Override
     protected void onResume() {
         super.onResume();
+        /*if(mPermissionsChecker.lacksPermissions(permissions)){
+            ActivityCompat.requestPermissions(this,permissions,1);
+        }else {
+            mCamera.startPreview();
+        }*/
+    }
 
-        mCamera.startPreview();
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        Configuration cf= this.getResources().getConfiguration(); //获取设置的配置信息
+        int ori = cf.orientation ; //获取屏幕方向
+        if(ori == cf.ORIENTATION_LANDSCAPE){
+            Log.d(TAG, "onConfigurationChanged: landscape");
+            //横屏
+            mCamera.setDisplayOrientation(0);
+        }else if(ori == cf.ORIENTATION_PORTRAIT){
+            //竖屏
+            mCamera.setDisplayOrientation(90);
+        }
     }
 
     @Override
@@ -110,6 +170,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                     finish();
                 }
             }
+            prepare();
         }
     }
 
@@ -149,6 +210,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
         takePhoto.setOnClickListener(this);
         recordVideo.setOnClickListener(this);
         captureRateButton.setOnClickListener(this);
+        mTimeLapseIndicator.setOnClickListener(this);
         captureRateListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
@@ -156,21 +218,27 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 switch(position){
                     case 0:
                         CAPTURE_RATE = 10;
+                        mTimeLapseIndicator.setImageResource(R.drawable.timelapse_1s);
                         break;
                     case 1:
                         CAPTURE_RATE = 8;
+                        mTimeLapseIndicator.setImageResource(R.drawable.timelapse_1_5s);
                         break;
                     case 2:
                         CAPTURE_RATE = 6.6;
+                        mTimeLapseIndicator.setImageResource(R.drawable.timelapse_2s);
                         break;
                     case 3:
                         CAPTURE_RATE = 5.7;
+                        mTimeLapseIndicator.setImageResource(R.drawable.timelapse_2_5s);
                         break;
                     case 4:
                         CAPTURE_RATE = 5;
+                        mTimeLapseIndicator.setImageResource(R.drawable.timelapse_3s);
                         break;
                     case 5:
                         CAPTURE_RATE = 3.3;
+                        mTimeLapseIndicator.setImageResource(R.drawable.timelapse_5s);
                         break;
                 }
                 rateItemAdapter.notifyDataSetChanged();
@@ -188,6 +256,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
         captureRateListView = (ListView) captureRateLayout.findViewById(R.id.rate_list);
         rateItemAdapter = new RateItemAdapter(this,R.layout.rate_list_item,rateItemList);
         captureRateListView.setAdapter(rateItemAdapter);
+        mTimeLapseIndicator = (ImageView) findViewById(R.id.time_lapse_indicator);
     }
 
     /**
@@ -212,9 +281,9 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
         Log.d(TAG, "getCameraInstance: camera number :" + cameraNumber);
         try {
-            c = Camera.open(0);
+            c = Camera.open(1);
 
-            usingCameraId = 0;
+            usingCameraId = 1;
         } catch (Exception e) {
             Log.d(TAG, "getCameraInstance: camera is not available");
             e.printStackTrace();
@@ -226,6 +295,10 @@ public class MainActivity extends Activity implements View.OnClickListener {
     public void onClick(View v) {
         switch (v.getId()) {
             case R.id.bt_change_camera:
+                Log.d(TAG, "onClick: uptimeMillis:" + SystemClock.uptimeMillis());
+                Log.d(TAG, "onClick: currentThreadTimeMillis:" + SystemClock.currentThreadTimeMillis());
+                Log.d(TAG, "onClick: currentTimeMillis:" + System.currentTimeMillis());
+
                 break;
             case R.id.bt_takephoto:
                 mCamera.takePicture(null,null,SaveMediaFile.mPictureCallback);
@@ -246,6 +319,13 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 }
                 break;
             case R.id.bt_capture_rate:
+                if(captureRateLayout.getVisibility() == View.GONE) {
+                    captureRateLayout.setVisibility(View.VISIBLE);
+                }else{
+                    captureRateLayout.setVisibility(View.GONE);
+                }
+                break;
+            case  R.id.time_lapse_indicator:
                 if(captureRateLayout.getVisibility() == View.GONE) {
                     captureRateLayout.setVisibility(View.VISIBLE);
                 }else{
@@ -273,8 +353,15 @@ public class MainActivity extends Activity implements View.OnClickListener {
         mediaRecorder.setCamera(mCamera);
         mediaRecorder.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
         mediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-        mediaRecorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_HIGH));
+        //mediaRecorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_QVGA));
         //mediaRecorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_TIME_LAPSE_HIGH));
+
+        CamcorderProfile camcorderProfile = CamcorderProfile.get(CamcorderProfile.QUALITY_HIGH);
+        camcorderProfile.videoFrameWidth = 1280;
+        camcorderProfile.videoFrameHeight = 720;
+        camcorderProfile.videoCodec = MediaRecorder.VideoEncoder.H264;
+        camcorderProfile.fileFormat = MediaRecorder.OutputFormat.MPEG_4;
+        mediaRecorder.setProfile(camcorderProfile);
 
         mediaRecorder.setOutputFile(SaveMediaFile.getOutputMediaFile(SaveMediaFile.MEDIA_TYPE_VIDEO).toString());
         mediaRecorder.setCaptureRate(CAPTURE_RATE);
